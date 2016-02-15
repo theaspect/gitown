@@ -3,6 +3,7 @@
   "branch": "master",
   "limit": 1000,
   "output": "output.json",
+  "callback": "callback",
   "replacements": {
     "john.doe@example.com": "J.Doe"
   }

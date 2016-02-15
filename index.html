@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Git log</title>
+<style>
+
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  margin: auto;
+  position: relative;
+  width: 1280px;
+  padding-top:20px;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.y.axis path {
+  x-display: none;
+}
+
+.y.axis line {
+  stroke: #777;
+  stroke-dasharray: 2,2;
+}
+
+</style>
+<svg id="canvas"></svg>
+
+<script src="http://d3js.org/d3.v3.js"></script>
+<!-- <script src="http://d3js.org/d3.v3.min.js"></script> -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/1.8.0/d3-legend.min.js"></script>
+<script src="http://underscorejs.org/underscore-min.js"></script>
+<script>
+function callback(rangeDate,rangeVals,authors,data){
+  var width = 1280, height = 500, paddingY = 25, paddingX = 120; 
+  var svg = d3.select("#canvas")
+      .attr("width", width)
+      .attr("height", height);
+       
+  var stack = d3.layout.stack()
+      .offset("zero")
+      .values(function(d) { return d.stats; })
+      .y(function(d){return d.value});
+  
+  var dateFormat = d3.time.format("%Y-%m-%d");
+  
+  var x = d3.time.scale()
+      .domain([dateFormat.parse(rangeDate[0]),dateFormat.parse(rangeDate[1])])
+      .range([0, width-paddingX]);
+
+  var y = d3.scale.linear()
+      .domain(rangeVals)
+      .range([height-paddingY,0]);
+
+  var area = d3.svg.area()
+      .x(function(d) { 
+          return x(dateFormat.parse(d.date)); 
+      })
+      .y0(function(d) { 
+          return y(d.y0); 
+      })
+      .y1(function(d) { 
+          return y(d.y+d.y0); 
+      })
+      .interpolate("basis");
+      
+      //http://phrogz.net/css/distinct-colors.html
+  var color = d3.scale.ordinal()
+      .domain(authors.reverse())
+      .range([
+        "#e673a1", "#982db3", "#1a1d33", "#00b8e6", "#397350", "#ced9a3", "#4c2900", "#ff8080", "#40202d", "#3d0073", 
+        "#40a6ff", "#00474d", "#00f200", "#e6f23d", "#f2ba79", "#733939", "#73003d", "#1d00d9", "#235b8c", "#00ffcc", 
+        "#269926", "#7f6c20", "#b23000", "#d5a3d9", "#6c6cd9", "#86a4b3", "#b6f2de", "#2b330d", "#ffaa00", "#997d73"
+      ].reverse().map(function(v){return d3.rgb(v)}).slice(0,authors.length));
+      
+  svg.selectAll("path")
+      .data(stack(data))
+    .enter().append("path")
+      .attr("d", function(d,i) { 
+          return area(d.stats.filter(function(v,i,arr){ return i%5 == 0 })); // Take every 5-th element to draw more smooth diagram
+      })
+      .style("fill", function(d) {
+          return color(d.author);
+      })
+      .append("title")
+      .text(function(d) { return d.author; });
+    
+  var xAxis = d3.svg.axis()
+      .scale(x)
+      .orient("bottom");
+        
+  svg.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + (height-paddingY) + ")")
+      .call(xAxis);
+
+  var yAxis = d3.svg.axis()
+      .scale(y)
+      .tickSize(width-paddingX-20)
+      .orient("right");
+
+  svg.append("g")
+      .attr("class", "y axis")
+      .attr("transform", "translate(0,0)")
+      .call(yAxis);
+
+  svg.selectAll(".y.axis text").attr("x","5").attr("dy","-0.32em")
+      
+    svg.append("g")
+      .attr("class", "legendOrdinal")
+      .attr("transform", "translate("+(width-paddingX)+",10)");
+
+    var legendOrdinal = d3.legend.color()
+      .shape("path", d3.svg.symbol().type("triangle-up").size(40)())
+      .shapePadding(10)
+      .scale(color);
+
+    svg.select(".legendOrdinal")
+      .call(legendOrdinal);
+
+}
+</script>
+<script src="output.json"></script>

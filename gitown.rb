@@ -9,12 +9,13 @@ class StatCache
   attr_reader :authors
   attr_reader :replacements
 
-  def initialize(path, output, branch, limit, replacements={})
+  def initialize(path, output, branch, limit, replacements={}, callback="callback")
     @path = path
     @output = output
     @replacements = replacements
     @branch = branch
     @limit = limit
+    @callback = callback
 
     @repo = Rugged::Repository.new(path)    
 
@@ -23,7 +24,7 @@ class StatCache
     @commits = Hash.new
     @blobs = Hash.new
   end
-  
+
   def walker()
     Rugged::Walker.walk(@repo, 
           show: @repo.branches[@branch].target_id, 
@@ -47,7 +48,7 @@ class StatCache
 
     @commits[hash]
   end
-  
+
   def annotate_file(commit, root, entry)
     if not @blobs.key?(entry[:oid]) then
       stats = Hash.new(0)
@@ -73,10 +74,10 @@ class StatCache
     #else
       #puts "Skip blob"
     end
-    
+
     @blobs[entry[:oid]]
   end
-  
+
   def get_name(name)
     if @replacements.key? name then
       @replacements[name]
@@ -84,31 +85,54 @@ class StatCache
       name
     end
   end
-  
+
   def write_totals()
     puts "Commits #{@commits.count}"
     puts "Blobs #{@blobs.count}"
     puts "Authors #{@authors.keys}"
   end
-  
+
   def write_output(result)
     write_totals
-    
+
     # Sort
     sorted_stats = result.sort_by{|k,v| k}.to_h # {date: stats,...}
-    # Populate authors for early commits
-    sorted_stats.each{|date,stats| stats.merge!(@authors){|key,v1,v2| if v1 then v1 else v2 end }}
+    max = 0
+    sorted_stats.each do |k,v|
+      total = v.values.reduce(:+)
+      max = total if max < total
+    end
+    # Dates
+    dates = sorted_stats.keys
+    # Stats per author
+    stats_per_author = []
+    # Iterate over author
+    @authors.keys.each do |author|
+      author_stat = []
+      dates.each do |date|
+        if sorted_stats[date][author] then 
+          author_stat.push({date: date,value: sorted_stats[date][author]})
+        else
+          author_stat.push({date: date,value: 0})
+        end 
+      end
+      stats_per_author.push({author: author, stats: author_stat})
+    end
 
     begin
       File.open(@output,'w') do |f|
-        f.write(JSON.pretty_generate(sorted_stats))
+        f.puts "#{@callback}("
+        f.puts "[\"#{dates[0]}\",\"#{dates[-1]}\"],"
+        f.puts "[0,#{max}],"
+        f.puts "#{JSON.pretty_generate(@authors.keys)},"
+        f.puts "#{JSON.pretty_generate(stats_per_author)});"
       end
     rescue => e
       puts "Cannot write to #{@output}"
       raise e
     end
   end
-  
+
   def gather_stats()
     result = Hash.new
 
@@ -125,7 +149,7 @@ class StatCache
 
     result
   end
-  
+
   def each_commit()
     commits_count = walker.count()
     cc = 0
@@ -139,7 +163,7 @@ class StatCache
         yield c, time
     }
   end
-  
+
   def inject_blobs(c, stats=Hash.new(0))
     files_count = c.tree.count_recursive()
     #puts "Files #{files_count}"
@@ -182,7 +206,8 @@ cache = StatCache.new \
   config.fetch('output', 'output.json'), \
   config.fetch('branch','master'), \
   config.fetch('limit',1000000), \
-  config.fetch('replacements',{})
+  config.fetch('replacements',{}), \
+  config.fetch('callback','callback')
 
 result = cache.gather_stats
 cache.write_output result
