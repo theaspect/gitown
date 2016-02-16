@@ -75,7 +75,7 @@ function callback(rangeDate,rangeVals,authors,data){
         "#e673a1", "#982db3", "#1a1d33", "#00b8e6", "#397350", "#ced9a3", "#4c2900", "#ff8080", "#40202d", "#3d0073", 
         "#40a6ff", "#00474d", "#00f200", "#e6f23d", "#f2ba79", "#733939", "#73003d", "#1d00d9", "#235b8c", "#00ffcc", 
         "#269926", "#7f6c20", "#b23000", "#d5a3d9", "#6c6cd9", "#86a4b3", "#b6f2de", "#2b330d", "#ffaa00", "#997d73"
-      ].reverse().map(function(v){return d3.rgb(v)}).slice(0,authors.length));
+      ].map(function(v){return d3.rgb(v)}).slice(0,authors.length));
       
   svg.selectAll("path")
       .data(stack(data))
