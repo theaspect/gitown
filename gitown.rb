@@ -9,12 +9,13 @@ class StatCache
   attr_reader :authors
   attr_reader :replacements
 
-  def initialize(path, output, branch, limit, replacements={}, callback="callback")
+  def initialize(path, output, branch, limit, interval, replacements={}, callback="callback")
     @path = path
     @output = output
     @replacements = replacements
     @branch = branch
     @limit = limit
+    @interval = interval
     @callback = callback
 
     @repo = Rugged::Repository.new(path)    
@@ -133,12 +134,23 @@ class StatCache
     end
   end
 
+  def map_date(date, interval)
+    if interval == 'daily' then
+      return date.strftime('%F')
+    elsif interval == 'weekly' then
+      # First day of every week
+      return Date.strptime(date.strftime("%GW%V"),"%GW%V").strftime('%F')
+    else
+      raise "Unknown interval #{interval}"
+    end
+  end
+
   def gather_stats()
     result = Hash.new
 
     each_commit() do |c, time|
       # Gather stats once per day
-      time = c.time.strftime('%F')
+      time = map_date(c.time, @interval)
       if result.key? time then
           #puts "Skip #{time}"
           next
@@ -206,6 +218,7 @@ cache = StatCache.new \
   config.fetch('output', 'output.json'), \
   config.fetch('branch','master'), \
   config.fetch('limit',1000000), \
+  config.fetch('interval', 'daily'), \
   config.fetch('replacements',{}), \
   config.fetch('callback','callback')
 

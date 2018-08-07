@@ -1,6 +1,7 @@
 {
   "path": "/Users/name/repo", /* Required */
   "branch": "master",
+  "interval": "weekly",
   "limit": 1000,
   "output": "output.json",
   "callback": "callback",
