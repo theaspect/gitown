@@ -1,2 +1,5 @@
-output.json
-config.json
+output.json*
+config.json*
+*.iml
+.idea
+Gemfile.lock
