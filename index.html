@@ -28,16 +28,17 @@ body {
 }
 
 </style>
-<svg id="canvas"></svg>
+<svg id="authors"></svg>
+<svg id="years"></svg>
 
 <script src="http://d3js.org/d3.v3.js"></script>
 <!-- <script src="http://d3js.org/d3.v3.min.js"></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/1.8.0/d3-legend.min.js"></script>
 <script src="http://underscorejs.org/underscore-min.js"></script>
 <script>
-function callback(rangeDate,rangeVals,authors,data){
+function callback(id, smooth, rangeDate,rangeVals,authors,data){
   var width = 1280, height = 500, paddingY = 25, paddingX = 120; 
-  var svg = d3.select("#canvas")
+  var svg = d3.select("#"+id)
       .attr("width", width)
       .attr("height", height);
        
@@ -81,7 +82,7 @@ function callback(rangeDate,rangeVals,authors,data){
       .data(stack(data))
     .enter().append("path")
       .attr("d", function(d,i) { 
-          return area(d.stats.filter(function(v,i,arr){ return i%5 == 0 })); // Take every 5-th element to draw more smooth diagram
+          return area(d.stats.filter(function(v,i,arr){ return i%smooth == 0 })); // Take every 5-th element to draw more smooth diagram
       })
       .style("fill", function(d) {
           return color(d.author);
@@ -124,4 +125,5 @@ function callback(rangeDate,rangeVals,authors,data){
 
 }
 </script>
-<script src="output.json"></script>
+<script src="authors.json"></script>
+<script src="years.json"></script>

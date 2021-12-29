@@ -1,9 +1,11 @@
 {
-  "path": "/Users/name/repo", /* Required */
+  "path": "/Users/name/repo", /* required */
   "branch": "master",
-  "interval": "weekly",
+  "interval": "weekly", /* daily, montly */
   "limit": 1000,
-  "output": "output.json",
+  "smooth": 1,
+  "authors": "authors.json",
+  "years": "years.json",
   "callback": "callback",
   "extensions": ["*.*"],
   "replacements": {

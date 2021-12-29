@@ -1,5 +1,7 @@
 output.json*
 config.json*
+authors.json*
+years.json*
 *.iml
 .idea
 Gemfile.lock
