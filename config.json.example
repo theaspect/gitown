@@ -5,6 +5,7 @@
   "limit": 1000,
   "output": "output.json",
   "callback": "callback",
+  "extensions": ["*.*"],
   "replacements": {
     "john.doe@example.com": "J.Doe"
   }
