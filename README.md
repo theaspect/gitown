@@ -9,7 +9,6 @@ Render from https://github.com/sdkman/sdkman-cli
   open `index.html`  
 
 ## TODO
-  1. add file extension filtering
-  2. add treshold line http://bl.ocks.org/mikehadlow/93b471e569e31af07cd3
-  3. publish ruby gem http://guides.rubygems.org/publishing/
+  [ ]. add treshold line http://bl.ocks.org/mikehadlow/93b471e569e31af07cd3
+  [ ]. publish ruby gem http://guides.rubygems.org/publishing/
 
