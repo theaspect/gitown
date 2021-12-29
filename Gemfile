@@ -1,3 +1,3 @@
-source "https://rubygems.org"
+source 'https://rubygems.org'
 
-gem 'rugged'
+gem 'rugged', '1.3.0'
