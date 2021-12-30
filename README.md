@@ -9,6 +9,9 @@ Render from https://github.com/sdkman/sdkman-cli
   open `index.html`  
 
 ## TODO
-  [ ]. add treshold line http://bl.ocks.org/mikehadlow/93b471e569e31af07cd3
+  [ ]. add threshold line http://bl.ocks.org/mikehadlow/93b471e569e31af07cd3
   [ ]. publish ruby gem http://guides.rubygems.org/publishing/
+  [ ]. normalize email, at least to lower case
+  [ ]. total time
+  [ ]. highlight inactive users
 
