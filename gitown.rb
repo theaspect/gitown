@@ -206,7 +206,7 @@ class StatCache
       raise e
     end
 
-    results = { authors: author_stats, years: year_stats }
+    results = { 'authors' => author_stats, 'years' => year_stats }
     put_blob(entry[:oid], results)
     results
   end
