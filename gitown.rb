@@ -3,14 +3,18 @@ require 'rugged'
 require 'json'
 require 'date'
 
+# TODO: no file close
+# TODO: cache whole days stats
 class StatCache
-  attr_reader :commits, :blobs, :authors, :years, :replacements
+  attr_reader :commits, :authors, :years, :replacements, :cache, :cache_file
 
-  def initialize(path, branch, limit, interval, replacements = {}, callback = 'callback', extensions = ['*.*'])
+  # TODO: decompose into cache, writer, walker
+  def initialize(path, branch, limit, start, interval, replacements = {}, callback = 'callback', extensions = ['*.*'], cache_path)
     @path = path
     @replacements = replacements
     @branch = branch
     @limit = limit
+    @start = Date.parse(start).to_time
     @interval = interval
     @callback = callback
     @extensions = extensions
@@ -21,7 +25,8 @@ class StatCache
     @authors = {}
     @years = {}
     @commits = {}
-    @blobs = {}
+    @cache = read_cache_if_exists(cache_path)
+    @cache_file = File.open(cache_path, 'a')
   end
 
   def walker
@@ -29,7 +34,9 @@ class StatCache
       @repo,
       show: @repo.branches[@branch].target_id,
       sort: Rugged::SORT_DATE | Rugged::SORT_TOPO | Rugged::SORT_REVERSE
-    ).first(@limit)
+    ).drop_while do |commit|
+      commit.time < @start
+    end.first(@limit)
   end
 
   # Return author: and year:
@@ -44,7 +51,7 @@ class StatCache
         raise e
       end
       @commits[hash] = { author: author, year: year }
-      @authors[get_name(author)] = 0
+      @authors[author] = 0
       @years[year] = 0
       # else
       # puts "Skip author"
@@ -65,9 +72,9 @@ class StatCache
   end
 
   def write_totals
-    puts "Commits #{@commits.count}"
-    puts "Blobs #{@blobs.count}"
     puts "Authors #{@authors.keys}"
+    puts "Commits #{@commits.count}"
+    puts "Blobs #{cache.count}"
   end
 
   def write_output(result, statistics, items, output, smooth)
@@ -132,14 +139,42 @@ class StatCache
     end
   end
 
+  # TODO: good section to move into cache class, which will manage file on it's own
+  def read_cache_if_exists(path)
+    buckets = {}
+    # Read cache
+    if File.exist?(path)
+      begin
+        File.readlines(path).each do |line|
+          buckets[line[0..39]] = JSON.parse(line[41..-1])
+        end
+      rescue StandardError => e
+        puts("Error during cache load #{e}")
+      end
+    else
+      puts "File #{path} not found"
+    end
+    buckets
+  end
+
+  def get_blob(oid)
+    @cache[oid]
+  end
+
+  def put_blob(oid, counts)
+    @cache[oid] = counts
+    # This is not pure JSON because I want to have a appendable cache
+    @cache_file.write "#{oid}\t#{JSON.generate(counts)}\n"
+    @cache_file.flush
+  end
+
   # File could be formed from several blobs so we caching each blob statistics
   def annotate_file_blob(commit, root, entry)
-    return @blobs[entry[:oid]] if @blobs.key?(entry[:oid])
+    blob = get_blob(entry[:oid])
+    return blob if blob
 
     author_stats = {}
-    author_stats.default_proc = proc { |hash, key| hash[key] = 0 }
     year_stats = {}
-    year_stats.default_proc = proc { |hash, key| hash[key] = 0 }
     command = "git --no-pager -C #{@path} blame -l -r #{commit.oid} -- '#{root}#{entry[:name]}'"
     begin
       output = `#{command}`
@@ -147,7 +182,9 @@ class StatCache
         # looks like bug in git blame
         # command could return ^24aab5e4254889039a3aa64d810f47d487aefd9 (john 2013-04-17 21:32:40 +0400 1) some line
         author, year = get_commit_info(r[0] != '^' ? r[0, 39] : r[1, 39]).values_at(:author, :year)
-        author_stats[get_name(author)] += 1
+        author_stats[author] = 0 unless author_stats.key?(author)
+        author_stats[author] += 1
+        year_stats[year] = 0 unless author_stats.key?(year)
         year_stats[year] += 1
       rescue StandardError => e
         puts r
@@ -157,33 +194,33 @@ class StatCache
       puts command
       raise e
     end
-    @blobs[entry[:oid]] = { authors: author_stats, years: year_stats }
-    # TODO: report intellij idea team about broken logic
-    # noinspection RubyUnnecessaryReturnValue
-    @blobs[entry[:oid]]
+
+    results = { authors: author_stats, years: year_stats }
+    put_blob(entry[:oid], results)
+    results
   end
 
   def fold_blobs(commit, stats = {})
-    # files_count = c.tree.count_recursive
-    # puts "Files #{files_count}"
-    # i = 0
+    files_count = commit.tree.count_recursive
+    puts "Files #{files_count}"
+    i = 0
     commit.tree.walk_blobs(:preorder) do |path, entry|
-      # i += 1
+      i += 1
       blob = @repo.lookup(entry[:oid])
       if !blob.binary? && validate_entry(@extensions, "#{path}#{entry[:name]}")
         yield path, entry, stats # Each blob
       end
-      # puts "#{i} out of #{files_count}" if i % 100 == 0
+      puts "#{i} out of #{files_count}" if (i % 1000).zero?
     end
     stats
   end
 
   # Iterate all commits from the first one
   def each_commit
-    commits_count = walker.count
+    #commits_count = walker.count
     walker.each_with_index do |commit, index|
       # Format time as "2016-12-31"
-      print "#{index}/#{commits_count} for #{commit.time.strftime('%F')}\r"
+      # puts "#{index}/#{commits_count} for #{commit.time.strftime('%F')}"
       yield commit
     end
   end
@@ -200,6 +237,7 @@ class StatCache
         next
       end
 
+      puts "Matched #{time}"
       buckets[time] = fold_blobs(commit) do |path, entry, stats|
         stats.merge!(annotate_file_blob(commit, path, entry)) do |_k, v1, v2|
           v1.merge(v2) { |key, old, new| old + new }
@@ -232,16 +270,20 @@ rescue StandardError => e
   raise e
 end
 
+# TODO: probably makes sense to store only repo name and save files as suffixes
+#  defaults to repo name
 cache = StatCache.new \
   config.fetch('path'), \
   config.fetch('branch', 'master'), \
   config.fetch('limit', 1_000_000), \
+  config.fetch('start', '1990-01-01'), \
   config.fetch('interval', 'daily'), \
   config.fetch('replacements', {}), \
   config.fetch('callback', 'callback'),
-  config.fetch('extensions', ['*.*'])
+  config.fetch('extensions', ['*.*']),
+  config.fetch('cache', 'blobs.cache')
 
 result = cache.gather_stats
 cache.write_totals
-cache.write_output result, :authors, cache.authors, config.fetch('authors', 'authors.json'), config.fetch('smooth', 1)
-cache.write_output result, :years, cache.years, config.fetch('years', 'years.json'), config.fetch('smooth', 1)
+cache.write_output result, 'authors', cache.authors, config.fetch('authors', 'authors.json'), config.fetch('smooth', 1)
+cache.write_output result, 'years', cache.years, config.fetch('years', 'years.json'), config.fetch('smooth', 1)
