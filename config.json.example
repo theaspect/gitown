@@ -4,9 +4,12 @@
   "interval": "weekly", /* daily, montly */
   "limit": 1000,
   "smooth": 1,
+  "start": "1900-01-01", /* first data to begin analysis */
   "authors": "authors.json",
   "years": "years.json",
+  "cache": "blobs.cache",
   "callback": "callback",
+  "collapse": 25, /* all except most active 25 commiters will be collapsed */
   "extensions": ["*.*"],
   "replacements": {
     "john.doe@example.com": "J.Doe"

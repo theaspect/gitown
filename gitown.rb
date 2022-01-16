@@ -307,7 +307,6 @@ end
 #   "path": "/Users/name/repo", /* Required */
 #   "branch": "master",
 #   "limit": 1000,
-#   "output": "output.json",
 #   "replacements": {
 #     "john.doe@example.com": "J.Doe"
 #   }
