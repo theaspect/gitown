@@ -6,7 +6,7 @@ require 'date'
 # TODO: no file close
 # TODO: cache whole days stats
 class StatCache
-  attr_reader :commits, :authors, :years, :replacements, :cache, :cache_file
+  attr_reader :commits, :authors, :merged_authors, :limited_authors, :years, :replacements, :cache, :cache_file
 
   # TODO: decompose into cache, writer, walker
   def initialize(path, branch, limit, start, interval, replacements = {}, callback = 'callback', extensions = ['*.*'], cache_path)
@@ -23,6 +23,8 @@ class StatCache
 
     # Cached data
     @authors = {}
+    @merged_authors = {}
+    @limited_authors = {}
     @years = {}
     @commits = {}
     @cache = read_cache_if_exists(cache_path)
@@ -50,6 +52,7 @@ class StatCache
         puts hash
         raise e
       end
+      # TODO: Here comes side effects
       @commits[hash] = { author: author, year: year }
       @authors[author] = 0
       @years[year] = 0
@@ -65,57 +68,61 @@ class StatCache
     rules.any? { |ext| File.fnmatch(ext, name) }
   end
 
-  # In case a committer has multiple emails run through replacements
-  def get_name(email)
-    # TODO: Could be a refactoring problem too, report to JetBrains
-    @replacements.key?(email) ? @replacements[email] : email
-  end
-
   def write_totals
     puts "Authors #{@authors.keys}"
     puts "Commits #{@commits.count}"
     puts "Blobs #{cache.count}"
   end
 
-  def write_output(result, statistics, items, output, smooth)
-    # Sort
-    sorted_stats = result.sort_by { |k, _v| k }.to_h # {date: stats,...}
-    max = 0
-    sorted_stats.each do |_k, v|
-      total = v[statistics].values.reduce(:+)
-      max = total if max < total
-    end
-    # Dates
-    dates = sorted_stats.keys
-    # Stats per author
-    stats_per_bucket = []
-    # Iterate over author
-    items.each_key do |stat|
-      author_stat = []
-      dates.each do |date|
-        if sorted_stats[date][statistics][stat]
-          author_stat.push({ date: date, value: sorted_stats[date][statistics][stat] })
-        else
-          author_stat.push({ date: date, value: 0 })
-        end
+  def merge_names(result)
+    merged = {}
+    result.each do |year, stats|
+      merged[year] = { 'years' => stats['years'], 'authors' => {} }
+      stats['authors'].each do |email, count|
+        name = get_name(email)
+        @merged_authors[name] = 0
+        merged[year]['authors'][name] = 0 unless merged[year]['authors'].key?(name)
+        merged[year]['authors'][name] += count
       end
-      stats_per_bucket.push({ author: stat, stats: author_stat })
+    end
+    merged
+  end
+
+  # In case a committer has multiple emails run through replacements
+  def get_name(email)
+    # TODO: Could be a refactoring problem too, report to JetBrains
+    @replacements.key?(email) ? @replacements[email] : email
+  end
+
+  def limit_authors(result, limit)
+    max_counts = {}
+    result.each do |_, stats|
+      stats['authors'].each do |email, count|
+        max_counts[email] = 0 unless max_counts.key?(email)
+        max_counts[email] = count if max_counts[email] < count
+      end
     end
 
-    begin
-      File.open(output, 'w') do |f|
-        f.puts "#{@callback}("
-        f.puts "\"#{statistics}\","
-        f.puts "#{smooth},"
-        f.puts "[\"#{dates[0]}\",\"#{dates[-1]}\"],"
-        f.puts "[0,#{max}],"
-        f.puts "#{JSON.pretty_generate(items.keys)},"
-        f.puts "#{JSON.pretty_generate(stats_per_bucket)});"
+    # Kee only top commiters
+    max_counts = max_counts
+                 .sort_by { |_, v| -v }
+                 .take(limit)
+                 .each_with_object({}) do |(k, v), acc|
+                   acc[k] = v
+                 end
+
+    limited = {}
+    result.each do |year, stats|
+      limited[year] = { 'years' => stats['years'], 'authors' => {} }
+      stats['authors'].each do |email, count|
+        name = max_counts.key?(email) ? email : 'Others'
+        @limited_authors[name] = 0
+        limited[year]['authors'][name] = 0 unless limited[year]['authors'].key?(name)
+        limited[year]['authors'][name] += count
       end
-    rescue StandardError => e
-      puts "Cannot write to #{output}"
-      raise e
     end
+
+    limited
   end
 
   def truncate_date(date, interval)
@@ -171,7 +178,11 @@ class StatCache
   # File could be formed from several blobs so we caching each blob statistics
   def annotate_file_blob(commit, root, entry)
     blob = get_blob(entry[:oid])
-    return blob if blob
+    if blob
+      blob['authors'].keys.each { |k| @authors[k] = 0 }
+      blob['years'].keys.each { |k| @years[k] = 0 }
+      return blob
+    end
 
     author_stats = {}
     year_stats = {}
@@ -184,7 +195,7 @@ class StatCache
         author, year = get_commit_info(r[0] != '^' ? r[0, 39] : r[1, 39]).values_at(:author, :year)
         author_stats[author] = 0 unless author_stats.key?(author)
         author_stats[author] += 1
-        year_stats[year] = 0 unless author_stats.key?(year)
+        year_stats[year] = 0 unless year_stats.key?(year)
         year_stats[year] += 1
       rescue StandardError => e
         puts r
@@ -249,6 +260,49 @@ class StatCache
   end
 end
 
+# TODO: calculate items on the way
+def write_output(result, statistics, items, callback, output, smooth)
+  # Sort
+  sorted_stats = result.sort_by { |k, _v| k }.to_h # {date: stats,...}
+  # Find maximum range across all days to have a chart range
+  max = 0
+  sorted_stats.each do |_k, v|
+    total = v[statistics].values.reduce(:+)
+    max = total if max < total
+  end
+  # Dates
+  dates = sorted_stats.keys
+  # Stats per author
+  stats_per_bucket = []
+  # Iterate over author or year
+  items.keys.sort.each do |stat|
+    author_stat = []
+    dates.each do |date|
+      if sorted_stats[date][statistics][stat]
+        author_stat.push({ date: date, value: sorted_stats[date][statistics][stat] })
+      else
+        author_stat.push({ date: date, value: 0 })
+      end
+    end
+    stats_per_bucket.push({ author: stat, stats: author_stat })
+  end
+
+  begin
+    File.open(output, 'w') do |f|
+      f.puts "#{callback}("
+      f.puts "\"#{statistics}\","
+      f.puts "#{smooth},"
+      f.puts "[\"#{dates[0]}\",\"#{dates[-1]}\"],"
+      f.puts "[0,#{max}],"
+      f.puts "#{JSON.pretty_generate(items.keys.sort)},"
+      f.puts "#{JSON.pretty_generate(stats_per_bucket)});"
+    end
+  rescue StandardError => e
+    puts "Cannot write to #{output}"
+    raise e
+  end
+end
+
 # {
 #   "path": "/Users/name/repo", /* Required */
 #   "branch": "master",
@@ -284,6 +338,18 @@ cache = StatCache.new \
   config.fetch('cache', 'blobs.cache')
 
 result = cache.gather_stats
+result = cache.merge_names(result)
+result = cache.limit_authors(result, config.fetch('collapse', 25))
 cache.write_totals
-cache.write_output result, 'authors', cache.authors, config.fetch('authors', 'authors.json'), config.fetch('smooth', 1)
-cache.write_output result, 'years', cache.years, config.fetch('years', 'years.json'), config.fetch('smooth', 1)
+
+write_output result, 'authors', \
+             cache.limited_authors, \
+             config.fetch('callback', 'callback'), \
+             config.fetch('authors', 'authors.json'), \
+             config.fetch('smooth', 1)
+
+write_output result, 'years', \
+             cache.years, \
+             config.fetch('callback', 'callback'), \
+             config.fetch('years', 'years.json'), \
+             config.fetch('smooth', 1)
