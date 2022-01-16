@@ -70,8 +70,9 @@ function callback(id, smooth, rangeDate,rangeVals,authors,data){
       .interpolate("basis");
       
       //http://phrogz.net/css/distinct-colors.html
+    const items = id === "authors" ? authors : authors.reverse()
   var color = d3.scale.ordinal()
-      .domain(authors.reverse())
+      .domain(items)
       .range([
         "#e673a1", "#982db3", "#1a1d33", "#00b8e6", "#397350", "#ced9a3", "#4c2900", "#ff8080", "#40202d", "#3d0073", 
         "#40a6ff", "#00474d", "#00f200", "#e6f23d", "#f2ba79", "#733939", "#73003d", "#1d00d9", "#235b8c", "#00ffcc", 

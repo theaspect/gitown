@@ -14,6 +14,6 @@ Render from https://github.com/sdkman/sdkman-cli
   [ ]. normalize email, at least to lower case
   [ ]. total time
   [ ]. highlight inactive users
-  [ ]. limit date range
   [ ]. stratigraphy by folders
+  [ ]. reorder items according to first appearance in the code
 
