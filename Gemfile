@@ -1,3 +1,3 @@
 source 'https://rubygems.org'
 
-gem 'rugged', '1.3.0'
+gem 'rugged', '1.3.1'
